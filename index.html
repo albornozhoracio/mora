@@ -59,6 +59,14 @@
   .hitem .htxt{flex:1 1 auto; min-width:0}
   .hitem .ht{font-size:12.5px; color:#e7eefa; font-weight:400; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .hitem .hd{font-size:10.5px; color:var(--silver-d); margin-top:1px}
+  /* carpetas */
+  .hfolder{margin-bottom:6px}
+  .hfolder-hdr{display:flex; align-items:center; gap:6px; padding:4px 8px; border-radius:8px; cursor:pointer; font-size:11px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; color:var(--silver); transition:background .15s; user-select:none}
+  .hfolder-hdr:hover{background:rgba(255,255,255,.04)}
+  .hfolder-hdr .harrow{font-size:9px; transition:transform .2s; display:inline-block}
+  .hfolder-hdr.open .harrow{transform:rotate(90deg)}
+  .hfolder-body{overflow:hidden; transition:max-height .25s ease; max-height:0}
+  .hfolder-body.open{max-height:400px}
   .memory{padding:18px 16px 14px}
   .pad{display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-radius:12px; background:rgba(0,114,206,.10); border:1px solid rgba(0,114,206,.25); margin-bottom:8px}
   .pad .name{font-weight:600; font-size:14px; color:#fff}
@@ -84,7 +92,7 @@
   .voicebar select{flex:1 1 auto; max-width:340px; font-family:var(--font); font-size:12.5px; background:rgba(255,255,255,.07); color:#eaf1fb; border:1px solid var(--line); border-radius:8px; padding:6px 9px; outline:none}
   .voicebar select option{background:#1B2A4A; color:#eaf1fb}
 
-  .messages{flex:1 1 auto; overflow-y:auto; padding:24px 22px; display:flex; flex-direction:column; gap:16px; scroll-behavior:smooth}
+  .messages{flex:1 1 auto; overflow-y:auto; padding:24px 22px; display:flex; flex-direction:column; gap:16px; scroll-behavior:smooth; min-height:0}
   .messages::-webkit-scrollbar{width:8px}
   .messages::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14); border-radius:8px}
   .empty{margin:auto; text-align:center; color:var(--silver-d); font-weight:300; font-size:14px; max-width:320px; line-height:1.6}
@@ -114,9 +122,7 @@
   .chart-card .ct{font-size:12.5px; font-weight:700; color:var(--ink); padding:2px 6px 8px; letter-spacing:.2px}
   .chart-card svg{width:100%; height:auto; display:block}
 
-  .suggest{display:flex; flex-wrap:wrap; gap:6px; padding:12px 18px 0; flex:0 0 auto}
-  .sug{font-size:11.5px; padding:5px 11px; border-radius:999px; background:rgba(0,114,206,.12); border:1px solid rgba(0,114,206,.3); color:#cfe6ff; cursor:pointer; font-weight:600; font-family:var(--font); transition:background .15s}
-  .sug:hover{background:rgba(0,114,206,.25)}
+  /* suggest eliminado */
 
   .composer{flex:0 0 auto; padding:12px 18px 6px; display:flex; gap:10px; align-items:center}
   .composer input{flex:1 1 auto; font-family:var(--font); font-size:14.5px; color:#fff; background:rgba(255,255,255,.07); border:1px solid var(--line); border-radius:12px; padding:12px 16px; outline:none; transition:border .18s}
@@ -263,14 +269,6 @@
         </div>
       </div>
 
-      <div class="suggest" id="suggest">
-        <span class="sug">Hola Mora, ¿cómo estás?</span>
-        <span class="sug">¿Qué sos y qué podés hacer?</span>
-        <span class="sug">¿Qué tenés en tu memoria?</span>
-        <span class="sug">Gráfico de ROP en intermedia 2</span>
-        <span class="sug">¿Qué PAD tuvo más NPT?</span>
-        <span class="sug">Gracias, Mora</span>
-      </div>
       <div class="composer">
         <button class="mic" id="btnMic" title="Hablarle a Mora">🎤</button>
         <input id="input" type="text" autocomplete="off" placeholder="Escribí un mensaje o tocá el micrófono…">
@@ -406,12 +404,38 @@ RESTRICCIONES:
     const el = document.getElementById('histList');
     if(!moraConvs.length){ el.innerHTML='<div style="color:#7a8fa8;font-size:12px;padding:4px 0">Sin conversaciones todavía</div>'; return; }
     const ico = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#3a95e0" stroke-width="1.8"><path d="M4 5h16v11H8l-4 4z" stroke-linejoin="round"/></svg>`;
-    el.innerHTML = moraConvs.map(c=>{
-      const d = new Date(c.ts); const now = new Date();
-      const diff = now - d; const mins = Math.floor(diff/60000);
-      const when = mins<60 ? `hace ${mins||1} min` : mins<1440 ? `hace ${Math.floor(mins/60)} h` : d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
-      return `<div class="hitem" onclick="loadConv('${c.id}')"><div class="ico">${ico}</div><div class="htxt"><div class="ht">${c.title}</div><div class="hd">${when}</div></div></div>`;
-    }).join('');
+    const folderIco = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 7h9l2-2h9v13H2z" stroke-linejoin="round"/></svg>`;
+    const now = new Date();
+    const groups = { hoy:[], semana:[], anterior:[] };
+    moraConvs.forEach(c=>{
+      const d = new Date(c.ts); const diff = now - d;
+      if(diff < 86400000) groups.hoy.push(c);
+      else if(diff < 604800000) groups.semana.push(c);
+      else groups.anterior.push(c);
+    });
+    const labels = { hoy:'Hoy', semana:'Esta semana', anterior:'Anteriores' };
+    let html = '';
+    Object.entries(groups).forEach(([key,list])=>{
+      if(!list.length) return;
+      html += `<div class="hfolder">
+        <div class="hfolder-hdr open" onclick="toggleFolder(this)">
+          <span style="opacity:.6">${folderIco}</span>${labels[key]}<span class="harrow">▶</span>
+          <span style="margin-left:auto;opacity:.45;font-size:10px;font-weight:400">${list.length}</span>
+        </div>
+        <div class="hfolder-body open">`;
+      list.forEach(c=>{
+        const d = new Date(c.ts); const diff2 = now - d; const mins = Math.floor(diff2/60000);
+        const when = mins<60 ? `hace ${mins||1} min` : mins<1440 ? `hace ${Math.floor(mins/60)} h` : d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
+        html += `<div class="hitem" onclick="loadConv('${c.id}')"><div class="ico">${ico}</div><div class="htxt"><div class="ht">${c.title}</div><div class="hd">${when}</div></div></div>`;
+      });
+      html += `</div></div>`;
+    });
+    el.innerHTML = html;
+  }
+  function toggleFolder(hdr){
+    hdr.classList.toggle('open');
+    const body = hdr.nextElementSibling;
+    body.classList.toggle('open');
   }
   function loadConv(id){
     const conv = moraConvs.find(c=>c.id===id); if(!conv) return;
