@@ -29,7 +29,7 @@
   .brand .sub{font-size:13px; color:var(--silver); font-weight:300; letter-spacing:.4px}
   .badge-demo{font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--silver); border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-weight:600}
 
-  .app{flex:1 1 auto; width:100%; max-width:1160px; margin:0 auto; padding:8px 22px 26px; display:grid; grid-template-columns:330px 1fr; gap:22px; min-height:0; align-items:start}
+  .app{flex:1 1 auto; width:100%; max-width:1160px; margin:0 auto; padding:8px 22px 18px; display:grid; grid-template-columns:270px 1fr; gap:22px; min-height:0; align-items:start}
   .rail{grid-column:1; display:flex; flex-direction:column; gap:18px; min-width:0}
   .chat{grid-column:2; height:calc(100vh - 104px); min-width:0}
   .mora-card{background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); border:1px solid var(--line); border-radius:20px; padding:22px 20px 18px; text-align:center; position:relative; overflow:hidden}
@@ -136,7 +136,7 @@
   .send{border:none; background:var(--francia); color:#fff}
   .send:hover{background:var(--francia-d)}
   .send:disabled,.mic:disabled{opacity:.4; cursor:default}
-  .hint{font-size:11px; color:var(--silver-d); text-align:center; padding:4px 18px 10px; font-weight:300}
+  .hint{font-size:11px; color:var(--silver-d); text-align:center; padding:4px 18px 12px; font-weight:300; background:transparent}
 
   @media (max-width:1024px){
     .side,.rail{display:contents}
@@ -238,7 +238,7 @@
         <div class="waves" id="waves"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
       </div>
       <div class="history">
-        <h3>Conversaciones recientes</h3>
+        <h3>Conversaciones recientes <button onclick="newFolder()" title="Nueva carpeta" style="margin-left:auto;background:none;border:1px solid rgba(0,114,206,.4);border-radius:6px;cursor:pointer;padding:2px 7px;font-size:10px;color:var(--francia-l);font-family:var(--font);transition:background .15s" onmouseover="this.style.background='rgba(0,114,206,.15)'" onmouseout="this.style.background='none'">+ Carpeta</button></h3>
         <div id="histList" style="font-size:12px;color:#7a8fa8;padding:4px 0">Sin conversaciones todavía</div>
       </div>
       <div class="memory">
@@ -371,6 +371,7 @@ RESTRICCIONES:
   let moraApiKey = localStorage.getItem('mora_api_key') || '';
   let moraHistory = []; // historial de mensajes de la sesión actual
   let moraConvs = JSON.parse(localStorage.getItem('mora_convs') || '[]');
+  let moraFolders = JSON.parse(localStorage.getItem('mora_folders') || '[]'); // carpetas manuales
   let moraCurTitle = '';
 
   function showApiModal(){ document.getElementById('apiModal').style.display='flex'; setTimeout(()=>document.getElementById('apiKeyInput').focus(),100); }
@@ -402,19 +403,50 @@ RESTRICCIONES:
 
   function renderHistList(){
     const el = document.getElementById('histList');
-    if(!moraConvs.length){ el.innerHTML='<div style="color:#7a8fa8;font-size:12px;padding:4px 0">Sin conversaciones todavía</div>'; return; }
+    if(!moraConvs.length && !moraFolders.length){ el.innerHTML='<div style="color:#7a8fa8;font-size:12px;padding:4px 0">Sin conversaciones todavía</div>'; return; }
     const ico = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#3a95e0" stroke-width="1.8"><path d="M4 5h16v11H8l-4 4z" stroke-linejoin="round"/></svg>`;
     const folderIco = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 7h9l2-2h9v13H2z" stroke-linejoin="round"/></svg>`;
     const now = new Date();
+
+    function convItemHtml(c){
+      const d = new Date(c.ts); const diff2 = now - d; const mins = Math.floor(diff2/60000);
+      const when = mins<60 ? `hace ${mins||1} min` : mins<1440 ? `hace ${Math.floor(mins/60)} h` : d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
+      return `<div class="hitem" style="position:relative">
+        <div class="ico" onclick="loadConv('${c.id}')">${ico}</div>
+        <div class="htxt" onclick="loadConv('${c.id}')"><div class="ht">${c.title}</div><div class="hd">${when}</div></div>
+        <button onclick="convFolderMenu('${c.id}',this)" title="Mover a carpeta" style="background:none;border:none;cursor:pointer;color:#5b7ba8;font-size:14px;padding:2px 4px;border-radius:5px;line-height:1" onmouseover="this.style.color='#3a95e0'" onmouseout="this.style.color='#5b7ba8'">⋯</button>
+      </div>`;
+    }
+
+    let html = '';
+
+    // 1. Carpetas manuales con sus convs asignadas
+    moraFolders.forEach(f=>{
+      const items = moraConvs.filter(c=>f.convIds.includes(c.id));
+      html += `<div class="hfolder">
+        <div class="hfolder-hdr open" onclick="toggleFolder(this)">
+          <span style="opacity:.6">${folderIco}</span>${f.name}<span class="harrow">▶</span>
+          <span style="margin-left:auto;opacity:.45;font-size:10px;font-weight:400">${items.length}</span>
+          <button onclick="event.stopPropagation();deleteFolder('${f.id}')" title="Eliminar carpeta" style="background:none;border:none;cursor:pointer;color:#5b7ba8;font-size:12px;padding:1px 4px;border-radius:4px" onmouseover="this.style.color='#e05a5a'" onmouseout="this.style.color='#5b7ba8'">✕</button>
+        </div>
+        <div class="hfolder-body open">`;
+      if(items.length) items.forEach(c=>{ html+=convItemHtml(c); });
+      else html+=`<div style="font-size:11px;color:#5b7ba8;padding:6px 8px">Arrastrá chats aquí</div>`;
+      html+=`</div></div>`;
+    });
+
+    // 2. Conversaciones sin carpeta, agrupadas por tiempo
+    const assignedIds = moraFolders.flatMap(f=>f.convIds);
+    const unassigned = moraConvs.filter(c=>!assignedIds.includes(c.id));
+
     const groups = { hoy:[], semana:[], anterior:[] };
-    moraConvs.forEach(c=>{
+    unassigned.forEach(c=>{
       const d = new Date(c.ts); const diff = now - d;
       if(diff < 86400000) groups.hoy.push(c);
       else if(diff < 604800000) groups.semana.push(c);
       else groups.anterior.push(c);
     });
     const labels = { hoy:'Hoy', semana:'Esta semana', anterior:'Anteriores' };
-    let html = '';
     Object.entries(groups).forEach(([key,list])=>{
       if(!list.length) return;
       html += `<div class="hfolder">
@@ -423,11 +455,7 @@ RESTRICCIONES:
           <span style="margin-left:auto;opacity:.45;font-size:10px;font-weight:400">${list.length}</span>
         </div>
         <div class="hfolder-body open">`;
-      list.forEach(c=>{
-        const d = new Date(c.ts); const diff2 = now - d; const mins = Math.floor(diff2/60000);
-        const when = mins<60 ? `hace ${mins||1} min` : mins<1440 ? `hace ${Math.floor(mins/60)} h` : d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
-        html += `<div class="hitem" onclick="loadConv('${c.id}')"><div class="ico">${ico}</div><div class="htxt"><div class="ht">${c.title}</div><div class="hd">${when}</div></div></div>`;
-      });
+      list.forEach(c=>{ html+=convItemHtml(c); });
       html += `</div></div>`;
     });
     el.innerHTML = html;
@@ -436,6 +464,46 @@ RESTRICCIONES:
     hdr.classList.toggle('open');
     const body = hdr.nextElementSibling;
     body.classList.toggle('open');
+  }
+
+  /* ---- Carpetas manuales ---- */
+  function saveFolders(){ localStorage.setItem('mora_folders', JSON.stringify(moraFolders)); }
+
+  function newFolder(){
+    const name = prompt('Nombre de la carpeta:','');
+    if(!name || !name.trim()) return;
+    moraFolders.push({ id: Date.now().toString(), name: name.trim(), convIds: [] });
+    saveFolders(); renderHistList();
+  }
+
+  function deleteFolder(fid){
+    moraFolders = moraFolders.filter(f=>f.id!==fid);
+    saveFolders(); renderHistList();
+  }
+
+  function assignToFolder(convId, folderId){
+    // quitar de cualquier carpeta previa
+    moraFolders.forEach(f=>{ f.convIds = f.convIds.filter(id=>id!==convId); });
+    if(folderId) { const f=moraFolders.find(f=>f.id===folderId); if(f) f.convIds.push(convId); }
+    saveFolders(); renderHistList();
+  }
+
+  function convFolderMenu(convId, btn){
+    // pequeño menú inline para mover a carpeta
+    const existing = document.getElementById('fmenu'); if(existing) existing.remove();
+    const div = document.createElement('div');
+    div.id='fmenu';
+    div.style.cssText='position:absolute;right:0;top:100%;background:#1b2a4a;border:1px solid rgba(0,114,206,.4);border-radius:10px;padding:6px;z-index:200;min-width:150px;box-shadow:0 8px 24px rgba(0,0,0,.5)';
+    const curFolder = moraFolders.find(f=>f.convIds.includes(convId));
+    let html=`<div style="font-size:10px;color:#7a8fa8;padding:2px 6px 6px;font-weight:700;letter-spacing:.8px">MOVER A</div>`;
+    html+=`<div style="padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12px;color:#cfe6ff" onclick="assignToFolder('${convId}',null);document.getElementById('fmenu').remove()">Sin carpeta</div>`;
+    moraFolders.forEach(f=>{
+      const active = f.convIds.includes(convId);
+      html+=`<div style="padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12px;color:${active?'#39d98a':'#cfe6ff'};background:${active?'rgba(57,217,138,.1)':'none'}" onclick="assignToFolder('${convId}','${f.id}');document.getElementById('fmenu').remove()">📁 ${f.name}</div>`;
+    });
+    div.innerHTML=html;
+    btn.style.position='relative'; btn.appendChild(div);
+    setTimeout(()=>document.addEventListener('click',function h(){ div.remove(); document.removeEventListener('click',h); },{once:true}),50);
   }
   function loadConv(id){
     const conv = moraConvs.find(c=>c.id===id); if(!conv) return;
@@ -565,6 +633,7 @@ RESTRICCIONES:
 
   async function respond(text){
     setAvatar('pensando');
+    lockInput(true);
     // Mostrar typing
     const thinkRow=document.createElement('div'); thinkRow.className='row mora'; thinkRow.id='thinkRow';
     thinkRow.innerHTML=`<div class="mini"><img src="${IMG.pensando}"></div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
@@ -572,6 +641,7 @@ RESTRICCIONES:
 
     const reply = await callMoraApi(text);
     thinkRow.remove();
+    lockInput(false); input.focus();
     if(!reply) return;
 
     const step = { emo:'hablando', text:reply, say:reply };
@@ -579,7 +649,8 @@ RESTRICCIONES:
     setAvatar('saludando'); statusTxt.textContent="En línea";
   }
 
-  function lock(b){ busy=b; btnSend.disabled=b; btnMic.disabled=b; input.disabled=b; btnDemo.disabled=b; }
+  function lock(b){ busy=b; btnDemo.disabled=b; }
+  function lockInput(b){ btnSend.disabled=b; btnMic.disabled=b; input.disabled=b; }
 
   async function converse(text){ addUser(text); await sleep(340); await respond(text); }
   async function sendFromInput(){ if(busy) return; const t=input.value.trim(); if(!t) return; lock(true); input.value=''; await converse(t); lock(false); input.focus(); }
